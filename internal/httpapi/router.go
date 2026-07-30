@@ -11,6 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+
+	"supermarket-sig-api/internal/erpdata"
 )
 
 // NewRouter construye las rutas y middlewares de la API.
@@ -79,6 +81,20 @@ func NewRouter(
 		cfg.IoT.DeviceKey,
 	)
 
+	erpRepository :=
+		erpdata.NewMemoryRepository()
+
+	erpService :=
+		erpdata.NewService(
+			erpRepository,
+		)
+
+	integrationHandler :=
+		handlers.NewIntegrationHandler(
+			erpService,
+			cfg.Integration.SyncKey,
+		)
+
 	router.Get(
 		"/health",
 		handlers.Health(
@@ -110,6 +126,21 @@ func NewRouter(
 					db,
 					cfg.Database.Enabled,
 				),
+			)
+
+			router.Route(
+				"/integracion",
+				func(router chi.Router) {
+					router.Post(
+						"/snapshot",
+						integrationHandler.ImportSnapshot,
+					)
+
+					router.Get(
+						"/estado",
+						integrationHandler.State,
+					)
+				},
 			)
 
 			router.Route(

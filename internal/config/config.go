@@ -31,6 +31,11 @@ type IoTConfig struct {
 	TemperatureMax float64
 }
 
+// IntegrationConfig contiene la clave de integración con el ERP.
+type IntegrationConfig struct {
+	SyncKey string
+}
+
 // Config contiene la configuración general de la API SIG.
 type Config struct {
 	AppEnvironment string
@@ -38,6 +43,7 @@ type Config struct {
 	CORSOrigins    []string
 	Database       DatabaseConfig
 	IoT            IoTConfig
+	Integration    IntegrationConfig
 }
 
 // Load carga las variables desde .env y desde el entorno.
@@ -117,6 +123,12 @@ func Load() Config {
 			TemperatureMax: getEnvFloat(
 				"IOT_TEMPERATURE_MAX",
 				8,
+			),
+		},
+		Integration: IntegrationConfig{
+			SyncKey: getEnv(
+				"SIG_SYNC_KEY",
+				"",
 			),
 		},
 	}
