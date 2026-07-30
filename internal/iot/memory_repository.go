@@ -549,3 +549,115 @@ func auditActionForIncidentStatus(
 		return "incidente_actualizado"
 	}
 }
+
+// Summary calcula los indicadores del dispositivo.
+func (repository *MemoryRepository) Summary(
+	_ context.Context,
+	deviceCode string,
+) (
+	IoTSummary,
+	error,
+) {
+	repository.mu.RLock()
+	defer repository.mu.RUnlock()
+
+	summary := IoTSummary{
+		DeviceCode: deviceCode,
+
+		Recommendations: make(
+			[]Recommendation,
+			0,
+		),
+
+		UpdatedAt: time.Now(),
+	}
+
+	readingIDs := make(
+		map[int64]struct{},
+	)
+
+	for _, reading := range repository.readings {
+		if reading.DeviceCode != deviceCode {
+			continue
+		}
+
+		readingIDs[reading.ID] =
+			struct{}{}
+
+		summary.TotalReadings++
+
+		switch reading.Status {
+		case ReadingStatusNormal:
+			summary.NormalReadings++
+
+		case ReadingStatusOutOfRange:
+			summary.OutOfRangeReadings++
+		}
+	}
+
+	if latestReading, exists :=
+		repository.latest[deviceCode]; exists {
+		readingCopy := latestReading
+
+		summary.LatestReading =
+			&readingCopy
+	}
+
+	alertIDs := make(
+		map[int64]struct{},
+	)
+
+	for _, alert := range repository.alerts {
+		if _, exists :=
+			readingIDs[alert.ReadingID]; !exists {
+			continue
+		}
+
+		alertIDs[alert.ID] =
+			struct{}{}
+
+		switch alert.Status {
+		case "abierta":
+			summary.Alerts.Open++
+
+		case "reconocida":
+			summary.Alerts.Recognized++
+
+		case "cerrada":
+			summary.Alerts.Closed++
+		}
+	}
+
+	for _, incident := range repository.incidents {
+		if _, exists :=
+			alertIDs[incident.AlertID]; !exists {
+			continue
+		}
+
+		switch incident.Status {
+		case "abierto":
+			summary.Incidents.Open++
+
+		case "reconocido":
+			summary.Incidents.Recognized++
+
+		case "en_tratamiento":
+			summary.Incidents.InTreatment++
+
+		case "resuelto":
+			summary.Incidents.Resolved++
+
+		case "cerrado":
+			summary.Incidents.Closed++
+		}
+	}
+
+	if summary.TotalReadings > 0 {
+		summary.NormalPercentage =
+			float64(summary.NormalReadings) *
+				100 /
+				float64(summary.TotalReadings)
+	}
+
+	return summary, nil
+}

@@ -91,3 +91,41 @@ type AuditEvent struct {
 	Detail     string    `json:"detalle,omitempty"`
 	OccurredAt time.Time `json:"fechaEvento"`
 }
+
+// Recommendation representa una recomendación gerencial calculada.
+type Recommendation struct {
+	Code     string `json:"codigo"`
+	Priority string `json:"prioridad"`
+	Title    string `json:"titulo"`
+	Message  string `json:"mensaje"`
+}
+
+// AlertCounts resume las alertas por estado.
+type AlertCounts struct {
+	Open       int `json:"abiertas"`
+	Recognized int `json:"reconocidas"`
+	Closed     int `json:"cerradas"`
+}
+
+// IncidentCounts resume los incidentes por estado.
+type IncidentCounts struct {
+	Open        int `json:"abiertos"`
+	Recognized  int `json:"reconocidos"`
+	InTreatment int `json:"enTratamiento"`
+	Resolved    int `json:"resueltos"`
+	Closed      int `json:"cerrados"`
+}
+
+// IoTSummary contiene los indicadores gerenciales de cadena de frío.
+type IoTSummary struct {
+	DeviceCode         string           `json:"codigoDispositivo"`
+	LatestReading      *Reading         `json:"ultimaLectura,omitempty"`
+	TotalReadings      int              `json:"totalLecturas"`
+	NormalReadings     int              `json:"lecturasNormales"`
+	OutOfRangeReadings int              `json:"lecturasFueraRango"`
+	NormalPercentage   float64          `json:"porcentajeNormal"`
+	Alerts             AlertCounts      `json:"alertas"`
+	Incidents          IncidentCounts   `json:"incidentes"`
+	Recommendations    []Recommendation `json:"recomendaciones"`
+	UpdatedAt          time.Time        `json:"fechaActualizacion"`
+}

@@ -706,3 +706,138 @@ func (service *Service) ListAudit(
 		limit,
 	)
 }
+
+// Summary devuelve los indicadores y recomendaciones de cadena de frío.
+func (service *Service) Summary(
+	ctx context.Context,
+	deviceCode string,
+) (
+	IoTSummary,
+	error,
+) {
+	deviceCode = strings.TrimSpace(
+		deviceCode,
+	)
+
+	if deviceCode == "" {
+		deviceCode =
+			service.deviceCode
+	}
+
+	if deviceCode != service.deviceCode {
+		return IoTSummary{},
+			&ValidationError{
+				Message: "El dispositivo indicado no está registrado.",
+			}
+	}
+
+	summary, err :=
+		service.repository.Summary(
+			ctx,
+			deviceCode,
+		)
+
+	if err != nil {
+		return IoTSummary{},
+			fmt.Errorf(
+				"no se pudo calcular el resumen IoT: %w",
+				err,
+			)
+	}
+
+	summary.Recommendations =
+		service.buildRecommendations(
+			summary,
+		)
+
+	return summary, nil
+}
+
+func (service *Service) buildRecommendations(
+	summary IoTSummary,
+) []Recommendation {
+	recommendations := make(
+		[]Recommendation,
+		0,
+	)
+
+	if summary.TotalReadings == 0 {
+		recommendations = append(
+			recommendations,
+			Recommendation{
+				Code:     "IOT_SIN_LECTURAS",
+				Priority: "alta",
+				Title:    "Dispositivo sin información",
+				Message:  "Todavía no existen lecturas para evaluar la cadena de frío.",
+			},
+		)
+
+		return recommendations
+	}
+
+	if summary.LatestReading != nil &&
+		summary.LatestReading.Status ==
+			ReadingStatusOutOfRange {
+		recommendations = append(
+			recommendations,
+			Recommendation{
+				Code:     "IOT_TEMPERATURA_ACTUAL_FUERA_RANGO",
+				Priority: "critica",
+				Title:    "Atender cadena de frío",
+				Message: fmt.Sprintf(
+					"La temperatura actual es %.2f °C y está fuera del rango permitido.",
+					summary.LatestReading.Temperature,
+				),
+			},
+		)
+	}
+
+	activeIncidents :=
+		summary.Incidents.Open +
+			summary.Incidents.Recognized +
+			summary.Incidents.InTreatment
+
+	if activeIncidents > 0 {
+		recommendations = append(
+			recommendations,
+			Recommendation{
+				Code:     "IOT_INCIDENTES_ACTIVOS",
+				Priority: "alta",
+				Title:    "Incidentes pendientes",
+				Message: fmt.Sprintf(
+					"Existen %d incidentes de calidad pendientes de cierre.",
+					activeIncidents,
+				),
+			},
+		)
+	}
+
+	if summary.NormalPercentage < 90 {
+		recommendations = append(
+			recommendations,
+			Recommendation{
+				Code:     "IOT_BAJO_CUMPLIMIENTO",
+				Priority: "media",
+				Title:    "Cumplimiento térmico bajo",
+				Message: fmt.Sprintf(
+					"Solo el %.2f %% de las lecturas se encuentra dentro del rango permitido.",
+					summary.NormalPercentage,
+				),
+			},
+		)
+	}
+
+	if len(recommendations) == 0 {
+		recommendations = append(
+			recommendations,
+			Recommendation{
+				Code:     "IOT_OPERACION_ESTABLE",
+				Priority: "informativa",
+				Title:    "Cadena de frío estable",
+				Message:  "No existen alertas activas y la última temperatura registrada es normal.",
+			},
+		)
+	}
+
+	return recommendations
+}

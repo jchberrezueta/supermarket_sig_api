@@ -115,6 +115,11 @@ func NewRouter(
 			router.Route(
 				"/iot",
 				func(router chi.Router) {
+					router.Get(
+						"/resumen",
+						iotHandler.Summary,
+					)
+
 					router.Post(
 						"/lecturas",
 						iotHandler.RegisterReading,

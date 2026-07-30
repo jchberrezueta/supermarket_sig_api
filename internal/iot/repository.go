@@ -68,4 +68,12 @@ type Repository interface {
 		[]AuditEvent,
 		error,
 	)
+
+	Summary(
+		ctx context.Context,
+		deviceCode string,
+	) (
+		IoTSummary,
+		error,
+	)
 }
