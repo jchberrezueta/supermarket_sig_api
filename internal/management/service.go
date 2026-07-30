@@ -361,8 +361,7 @@ func (service *Service) applyIoTSummary(
 			&readAt
 	}
 
-	for _, recommendation :=
-		range iotSummary.Recommendations {
+	for _, recommendation := range iotSummary.Recommendations {
 		summary.Recommendations = append(
 			summary.Recommendations,
 			Recommendation{
