@@ -155,6 +155,26 @@ func NewRouter(
 				},
 			)
 
+			router.Route(
+				"/ventas",
+				func(router chi.Router) {
+					router.Get(
+						"/resumen",
+						managementHandler.SalesOverview,
+					)
+
+					router.Get(
+						"/tendencia",
+						managementHandler.SalesTrend,
+					)
+
+					router.Get(
+						"/productos",
+						managementHandler.TopSellingProducts,
+					)
+				},
+			)
+
 			router.Get(
 				"/resumen-ejecutivo",
 				managementHandler.ExecutiveSummary,
