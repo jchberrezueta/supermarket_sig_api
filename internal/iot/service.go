@@ -680,3 +680,29 @@ func (service *Service) CloseIncident(
 
 	return detail, nil
 }
+
+// ListAudit devuelve eventos recientes de auditoría.
+func (service *Service) ListAudit(
+	ctx context.Context,
+	action string,
+	limit int,
+) (
+	[]AuditEvent,
+	error,
+) {
+	action = strings.TrimSpace(
+		action,
+	)
+
+	limit, err := validateLimit(limit)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return service.repository.ListAudit(
+		ctx,
+		action,
+		limit,
+	)
+}

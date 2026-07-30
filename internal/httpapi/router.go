@@ -166,6 +166,11 @@ func NewRouter(
 					)
 				},
 			)
+
+			router.Get(
+				"/auditoria",
+				iotHandler.ListAudit,
+			)
 		},
 	)
 

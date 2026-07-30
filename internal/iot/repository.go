@@ -59,4 +59,13 @@ type Repository interface {
 		detail *IncidentDetail,
 		newAction *CorrectiveAction,
 	) error
+
+	ListAudit(
+		ctx context.Context,
+		action string,
+		limit int,
+	) (
+		[]AuditEvent,
+		error,
+	)
 }

@@ -3,6 +3,7 @@ package iot
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -16,6 +17,7 @@ type MemoryRepository struct {
 	nextAlertID    int64
 	nextIncidentID int64
 	nextActionID   int64
+	nextAuditID    int64
 
 	readings []Reading
 
@@ -27,6 +29,7 @@ type MemoryRepository struct {
 
 	actions map[int64][]CorrectiveAction
 	latest  map[string]Reading
+	audit   []AuditEvent
 }
 
 // NewMemoryRepository crea un repositorio local vacío.
@@ -36,6 +39,7 @@ func NewMemoryRepository() *MemoryRepository {
 		nextAlertID:    1,
 		nextIncidentID: 1,
 		nextActionID:   1,
+		nextAuditID:    1,
 
 		readings: make(
 			[]Reading,
@@ -67,6 +71,11 @@ func NewMemoryRepository() *MemoryRepository {
 		latest: make(
 			map[string]Reading,
 		),
+
+		audit: make(
+			[]AuditEvent,
+			0,
+		),
 	}
 }
 
@@ -93,6 +102,23 @@ func (repository *MemoryRepository) Save(
 	repository.latest[result.Reading.DeviceCode] =
 		result.Reading
 
+	repository.appendAuditLocked(
+		AuditEvent{
+			Actor:    result.Reading.DeviceCode,
+			Action:   "lectura_registrada",
+			Module:   "iot",
+			Entity:   "lectura_sensor",
+			RecordID: fmt.Sprint(result.Reading.ID),
+			Result:   "correcto",
+			Detail: fmt.Sprintf(
+				"Temperatura %.2f °C, estado %s.",
+				result.Reading.Temperature,
+				result.Reading.Status,
+			),
+			OccurredAt: now,
+		},
+	)
+
 	if result.Alert != nil {
 		result.Alert.ID = repository.nextAlertID
 		result.Alert.ReadingID = result.Reading.ID
@@ -106,6 +132,19 @@ func (repository *MemoryRepository) Save(
 		repository.alertOrder = append(
 			repository.alertOrder,
 			result.Alert.ID,
+		)
+
+		repository.appendAuditLocked(
+			AuditEvent{
+				Actor:      "sistema",
+				Action:     "alerta_creada",
+				Module:     "cadena_frio",
+				Entity:     "alerta",
+				RecordID:   fmt.Sprint(result.Alert.ID),
+				Result:     "correcto",
+				Detail:     result.Alert.Message,
+				OccurredAt: now,
+			},
 		)
 	}
 
@@ -130,6 +169,19 @@ func (repository *MemoryRepository) Save(
 
 		repository.actions[result.Incident.ID] =
 			make([]CorrectiveAction, 0)
+
+		repository.appendAuditLocked(
+			AuditEvent{
+				Actor:      "sistema",
+				Action:     "incidente_creado",
+				Module:     "calidad",
+				Entity:     "incidente",
+				RecordID:   fmt.Sprint(result.Incident.ID),
+				Result:     "correcto",
+				Detail:     result.Incident.Description,
+				OccurredAt: now,
+			},
+		)
 	}
 
 	return nil
@@ -292,9 +344,14 @@ func (repository *MemoryRepository) FindIncident(
 	storedActions :=
 		repository.actions[incidentID]
 
-	actions := append(
-		[]CorrectiveAction(nil),
-		storedActions...,
+	actions := make(
+		[]CorrectiveAction,
+		len(storedActions),
+	)
+
+	copy(
+		actions,
+		storedActions,
 	)
 
 	return IncidentDetail{
@@ -316,8 +373,10 @@ func (repository *MemoryRepository) ApplyIncidentWorkflow(
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
 
-	if _, exists :=
-		repository.incidents[detail.Incident.ID]; !exists {
+	previousIncident, exists :=
+		repository.incidents[detail.Incident.ID]
+
+	if !exists {
 		return fmt.Errorf(
 			"el incidente %d no existe",
 			detail.Incident.ID,
@@ -338,6 +397,36 @@ func (repository *MemoryRepository) ApplyIncidentWorkflow(
 	repository.alerts[detail.Alert.ID] =
 		detail.Alert
 
+	if previousIncident.Status !=
+		detail.Incident.Status {
+		actor := strings.TrimSpace(
+			detail.Incident.Responsible,
+		)
+
+		if actor == "" {
+			actor = "sistema"
+		}
+
+		repository.appendAuditLocked(
+			AuditEvent{
+				Actor: actor,
+				Action: auditActionForIncidentStatus(
+					detail.Incident.Status,
+				),
+				Module:   "calidad",
+				Entity:   "incidente",
+				RecordID: fmt.Sprint(detail.Incident.ID),
+				Result:   "correcto",
+				Detail: fmt.Sprintf(
+					"Transición de %s a %s.",
+					previousIncident.Status,
+					detail.Incident.Status,
+				),
+				OccurredAt: time.Now(),
+			},
+		)
+	}
+
 	if newAction != nil {
 		newAction.ID = repository.nextActionID
 		newAction.IncidentID =
@@ -354,12 +443,109 @@ func (repository *MemoryRepository) ApplyIncidentWorkflow(
 				repository.actions[detail.Incident.ID],
 				*newAction,
 			)
+
+		repository.appendAuditLocked(
+			AuditEvent{
+				Actor:      newAction.Responsible,
+				Action:     "accion_correctiva_registrada",
+				Module:     "calidad",
+				Entity:     "accion_correctiva",
+				RecordID:   fmt.Sprint(newAction.ID),
+				Result:     "correcto",
+				Detail:     newAction.Description,
+				OccurredAt: newAction.CreatedAt,
+			},
+		)
 	}
 
-	detail.Actions = append(
-		[]CorrectiveAction(nil),
-		repository.actions[detail.Incident.ID]...,
+	storedActions :=
+		repository.actions[detail.Incident.ID]
+
+	detail.Actions = make(
+		[]CorrectiveAction,
+		len(storedActions),
+	)
+
+	copy(
+		detail.Actions,
+		storedActions,
 	)
 
 	return nil
+}
+
+// ListAudit devuelve los eventos de auditoría más recientes.
+func (repository *MemoryRepository) ListAudit(
+	_ context.Context,
+	action string,
+	limit int,
+) (
+	[]AuditEvent,
+	error,
+) {
+	repository.mu.RLock()
+	defer repository.mu.RUnlock()
+
+	action = strings.TrimSpace(
+		action,
+	)
+
+	result := make(
+		[]AuditEvent,
+		0,
+	)
+
+	for index := len(repository.audit) - 1; index >= 0 && len(result) < limit; index-- {
+		event := repository.audit[index]
+
+		if action != "" &&
+			event.Action != action {
+			continue
+		}
+
+		result = append(
+			result,
+			event,
+		)
+	}
+
+	return result, nil
+}
+
+func (repository *MemoryRepository) appendAuditLocked(
+	event AuditEvent,
+) {
+	event.ID = repository.nextAuditID
+
+	if event.OccurredAt.IsZero() {
+		event.OccurredAt = time.Now()
+	}
+
+	repository.nextAuditID++
+
+	repository.audit = append(
+		repository.audit,
+		event,
+	)
+}
+
+func auditActionForIncidentStatus(
+	status string,
+) string {
+	switch status {
+	case "reconocido":
+		return "incidente_reconocido"
+
+	case "en_tratamiento":
+		return "incidente_en_tratamiento"
+
+	case "resuelto":
+		return "incidente_resuelto"
+
+	case "cerrado":
+		return "incidente_cerrado"
+
+	default:
+		return "incidente_actualizado"
+	}
 }

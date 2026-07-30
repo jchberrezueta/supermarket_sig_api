@@ -78,3 +78,16 @@ type IncidentDetail struct {
 	Alert    Alert              `json:"alerta"`
 	Actions  []CorrectiveAction `json:"acciones"`
 }
+
+// AuditEvent representa una acción trazable realizada en el SIG.
+type AuditEvent struct {
+	ID         int64     `json:"id"`
+	Actor      string    `json:"actor"`
+	Action     string    `json:"accion"`
+	Module     string    `json:"modulo"`
+	Entity     string    `json:"entidad"`
+	RecordID   string    `json:"idRegistro"`
+	Result     string    `json:"resultado"`
+	Detail     string    `json:"detalle,omitempty"`
+	OccurredAt time.Time `json:"fechaEvento"`
+}
