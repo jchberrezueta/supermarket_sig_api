@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/cors"
 
 	"supermarket-sig-api/internal/erpdata"
+	"supermarket-sig-api/internal/management"
 )
 
 // NewRouter construye las rutas y middlewares de la API.
@@ -95,6 +96,17 @@ func NewRouter(
 			cfg.Integration.SyncKey,
 		)
 
+	managementService :=
+		management.NewService(
+			erpService,
+			iotService,
+		)
+
+	managementHandler :=
+		handlers.NewManagementHandler(
+			managementService,
+		)
+
 	router.Get(
 		"/health",
 		handlers.Health(
@@ -141,6 +153,11 @@ func NewRouter(
 						integrationHandler.State,
 					)
 				},
+			)
+
+			router.Get(
+				"/resumen-ejecutivo",
+				managementHandler.ExecutiveSummary,
 			)
 
 			router.Route(

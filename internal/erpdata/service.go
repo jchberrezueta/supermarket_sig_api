@@ -583,3 +583,16 @@ func normalizeSnapshot(
 		snapshot.Movements = []InventoryMovement{}
 	}
 }
+
+// CurrentSnapshot devuelve la información empresarial sincronizada.
+func (service *Service) CurrentSnapshot(
+	ctx context.Context,
+) (
+	Snapshot,
+	bool,
+	error,
+) {
+	return service.repository.CurrentSnapshot(
+		ctx,
+	)
+}
