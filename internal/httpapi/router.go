@@ -156,6 +156,26 @@ func NewRouter(
 			)
 
 			router.Route(
+				"/inventario",
+				func(router chi.Router) {
+					router.Get(
+						"/resumen",
+						managementHandler.InventoryOverview,
+					)
+
+					router.Get(
+						"/stock-critico",
+						managementHandler.CriticalStock,
+					)
+
+					router.Get(
+						"/caducidad",
+						managementHandler.ExpiringLots,
+					)
+				},
+			)
+
+			router.Route(
 				"/ventas",
 				func(router chi.Router) {
 					router.Get(
