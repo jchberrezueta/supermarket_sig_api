@@ -1,0 +1,153 @@
+package httpapi
+
+import (
+	"database/sql"
+	"net/http"
+
+	"supermarket-sig-api/internal/config"
+	"supermarket-sig-api/internal/httpapi/handlers"
+	"supermarket-sig-api/internal/iot"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
+)
+
+// NewRouter construye las rutas y middlewares de la API.
+func NewRouter(
+	cfg config.Config,
+	db *sql.DB,
+) http.Handler {
+	router := chi.NewRouter()
+
+	router.Use(middleware.RequestID)
+	router.Use(middleware.RealIP)
+	router.Use(middleware.Logger)
+	router.Use(middleware.Recoverer)
+
+	router.Use(
+		cors.Handler(
+			cors.Options{
+				AllowedOrigins: cfg.CORSOrigins,
+
+				AllowedMethods: []string{
+					http.MethodGet,
+					http.MethodPost,
+					http.MethodPut,
+					http.MethodPatch,
+					http.MethodDelete,
+					http.MethodOptions,
+				},
+
+				AllowedHeaders: []string{
+					"Accept",
+					"Authorization",
+					"Content-Type",
+					"X-Device-Key",
+					"X-SIG-Key",
+				},
+
+				ExposedHeaders: []string{
+					"X-Request-ID",
+				},
+
+				AllowCredentials: false,
+				MaxAge:           300,
+			},
+		),
+	)
+
+	router.NotFound(
+		handlers.NotFound,
+	)
+
+	router.MethodNotAllowed(
+		handlers.MethodNotAllowed,
+	)
+
+	iotRepository := iot.NewMemoryRepository()
+
+	iotService := iot.NewService(
+		iotRepository,
+		cfg.IoT.DeviceCode,
+		cfg.IoT.TemperatureMin,
+		cfg.IoT.TemperatureMax,
+	)
+
+	iotHandler := handlers.NewIoTHandler(
+		iotService,
+		cfg.IoT.DeviceKey,
+	)
+
+	router.Get(
+		"/health",
+		handlers.Health(
+			cfg.AppEnvironment,
+		),
+	)
+
+	router.Get(
+		"/db-health",
+		handlers.DatabaseHealth(
+			db,
+			cfg.Database.Enabled,
+		),
+	)
+
+	router.Route(
+		"/api/sig",
+		func(router chi.Router) {
+			router.Get(
+				"/health",
+				handlers.Health(
+					cfg.AppEnvironment,
+				),
+			)
+
+			router.Get(
+				"/db-health",
+				handlers.DatabaseHealth(
+					db,
+					cfg.Database.Enabled,
+				),
+			)
+
+			router.Route(
+				"/iot",
+				func(router chi.Router) {
+					router.Post(
+						"/lecturas",
+						iotHandler.RegisterReading,
+					)
+
+					router.Get(
+						"/lecturas",
+						iotHandler.ListReadings,
+					)
+
+					router.Get(
+						"/lecturas/ultima",
+						iotHandler.LatestReading,
+					)
+
+					router.Get(
+						"/alertas",
+						iotHandler.ListAlerts,
+					)
+
+					router.Get(
+						"/incidentes",
+						iotHandler.ListIncidents,
+					)
+
+					router.Get(
+						"/incidentes/{incidentID}",
+						iotHandler.IncidentDetail,
+					)
+				},
+			)
+		},
+	)
+
+	return router
+}
