@@ -420,3 +420,263 @@ func validateLimit(
 
 	return limit, nil
 }
+
+// ConflictError representa una transición BPM no permitida.
+type ConflictError struct {
+	Message string
+}
+
+func (err *ConflictError) Error() string {
+	return err.Message
+}
+
+// RecognizeIncident reconoce formalmente un incidente abierto.
+func (service *Service) RecognizeIncident(
+	ctx context.Context,
+	incidentID int64,
+	responsible string,
+) (
+	IncidentDetail,
+	error,
+) {
+	responsible = strings.TrimSpace(
+		responsible,
+	)
+
+	if len(responsible) < 3 ||
+		len(responsible) > 120 {
+		return IncidentDetail{},
+			&ValidationError{
+				Message: "El responsable debe tener entre 3 y 120 caracteres.",
+			}
+	}
+
+	detail, err :=
+		service.IncidentDetail(
+			ctx,
+			incidentID,
+		)
+
+	if err != nil {
+		return IncidentDetail{}, err
+	}
+
+	if detail.Incident.Status != "abierto" {
+		return IncidentDetail{},
+			&ConflictError{
+				Message: "Solo se puede reconocer un incidente abierto.",
+			}
+	}
+
+	now := time.Now()
+
+	detail.Incident.Status = "reconocido"
+	detail.Incident.Responsible = responsible
+	detail.Incident.RecognizedAt = &now
+
+	detail.Alert.Status = "reconocida"
+	detail.Alert.RecognizedAt = &now
+
+	if err := service.repository.ApplyIncidentWorkflow(
+		ctx,
+		&detail,
+		nil,
+	); err != nil {
+		return IncidentDetail{},
+			fmt.Errorf(
+				"no se pudo reconocer el incidente: %w",
+				err,
+			)
+	}
+
+	return detail, nil
+}
+
+// AddCorrectiveAction registra una acción correctiva.
+func (service *Service) AddCorrectiveAction(
+	ctx context.Context,
+	incidentID int64,
+	description string,
+	responsible string,
+	result string,
+) (
+	IncidentDetail,
+	error,
+) {
+	description = strings.TrimSpace(
+		description,
+	)
+
+	responsible = strings.TrimSpace(
+		responsible,
+	)
+
+	result = strings.TrimSpace(
+		result,
+	)
+
+	if len(description) < 10 ||
+		len(description) > 1000 {
+		return IncidentDetail{},
+			&ValidationError{
+				Message: "La descripción debe tener entre 10 y 1000 caracteres.",
+			}
+	}
+
+	if len(responsible) < 3 ||
+		len(responsible) > 120 {
+		return IncidentDetail{},
+			&ValidationError{
+				Message: "El responsable debe tener entre 3 y 120 caracteres.",
+			}
+	}
+
+	if len(result) > 1000 {
+		return IncidentDetail{},
+			&ValidationError{
+				Message: "El resultado no puede superar los 1000 caracteres.",
+			}
+	}
+
+	detail, err :=
+		service.IncidentDetail(
+			ctx,
+			incidentID,
+		)
+
+	if err != nil {
+		return IncidentDetail{}, err
+	}
+
+	if detail.Incident.Status != "reconocido" &&
+		detail.Incident.Status != "en_tratamiento" {
+		return IncidentDetail{},
+			&ConflictError{
+				Message: "El incidente debe estar reconocido o en tratamiento.",
+			}
+	}
+
+	action := &CorrectiveAction{
+		Description: description,
+		Responsible: responsible,
+		Result:      result,
+		CreatedAt:   time.Now(),
+	}
+
+	detail.Incident.Status =
+		"en_tratamiento"
+
+	if err := service.repository.ApplyIncidentWorkflow(
+		ctx,
+		&detail,
+		action,
+	); err != nil {
+		return IncidentDetail{},
+			fmt.Errorf(
+				"no se pudo registrar la acción correctiva: %w",
+				err,
+			)
+	}
+
+	return detail, nil
+}
+
+// ResolveIncident marca como resuelto un incidente tratado.
+func (service *Service) ResolveIncident(
+	ctx context.Context,
+	incidentID int64,
+) (
+	IncidentDetail,
+	error,
+) {
+	detail, err :=
+		service.IncidentDetail(
+			ctx,
+			incidentID,
+		)
+
+	if err != nil {
+		return IncidentDetail{}, err
+	}
+
+	if detail.Incident.Status != "en_tratamiento" {
+		return IncidentDetail{},
+			&ConflictError{
+				Message: "Solo se puede resolver un incidente en tratamiento.",
+			}
+	}
+
+	if len(detail.Actions) == 0 {
+		return IncidentDetail{},
+			&ConflictError{
+				Message: "Debe existir al menos una acción correctiva.",
+			}
+	}
+
+	now := time.Now()
+
+	detail.Incident.Status = "resuelto"
+	detail.Incident.ResolvedAt = &now
+
+	if err := service.repository.ApplyIncidentWorkflow(
+		ctx,
+		&detail,
+		nil,
+	); err != nil {
+		return IncidentDetail{},
+			fmt.Errorf(
+				"no se pudo resolver el incidente: %w",
+				err,
+			)
+	}
+
+	return detail, nil
+}
+
+// CloseIncident cierra un incidente previamente resuelto.
+func (service *Service) CloseIncident(
+	ctx context.Context,
+	incidentID int64,
+) (
+	IncidentDetail,
+	error,
+) {
+	detail, err :=
+		service.IncidentDetail(
+			ctx,
+			incidentID,
+		)
+
+	if err != nil {
+		return IncidentDetail{}, err
+	}
+
+	if detail.Incident.Status != "resuelto" {
+		return IncidentDetail{},
+			&ConflictError{
+				Message: "Solo se puede cerrar un incidente resuelto.",
+			}
+	}
+
+	now := time.Now()
+
+	detail.Incident.Status = "cerrado"
+	detail.Incident.ClosedAt = &now
+
+	detail.Alert.Status = "cerrada"
+	detail.Alert.ClosedAt = &now
+
+	if err := service.repository.ApplyIncidentWorkflow(
+		ctx,
+		&detail,
+		nil,
+	); err != nil {
+		return IncidentDetail{},
+			fmt.Errorf(
+				"no se pudo cerrar el incidente: %w",
+				err,
+			)
+	}
+
+	return detail, nil
+}

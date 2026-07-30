@@ -53,4 +53,10 @@ type Repository interface {
 		bool,
 		error,
 	)
+
+	ApplyIncidentWorkflow(
+		ctx context.Context,
+		detail *IncidentDetail,
+		newAction *CorrectiveAction,
+	) error
 }

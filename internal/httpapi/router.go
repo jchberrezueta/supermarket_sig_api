@@ -144,6 +144,26 @@ func NewRouter(
 						"/incidentes/{incidentID}",
 						iotHandler.IncidentDetail,
 					)
+
+					router.Patch(
+						"/incidentes/{incidentID}/reconocer",
+						iotHandler.RecognizeIncident,
+					)
+
+					router.Post(
+						"/incidentes/{incidentID}/acciones",
+						iotHandler.AddCorrectiveAction,
+					)
+
+					router.Patch(
+						"/incidentes/{incidentID}/resolver",
+						iotHandler.ResolveIncident,
+					)
+
+					router.Patch(
+						"/incidentes/{incidentID}/cerrar",
+						iotHandler.CloseIncident,
+					)
 				},
 			)
 		},

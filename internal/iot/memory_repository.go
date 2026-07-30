@@ -2,6 +2,7 @@ package iot
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -14,6 +15,7 @@ type MemoryRepository struct {
 	nextReadingID  int64
 	nextAlertID    int64
 	nextIncidentID int64
+	nextActionID   int64
 
 	readings []Reading
 
@@ -23,7 +25,8 @@ type MemoryRepository struct {
 	incidents     map[int64]Incident
 	incidentOrder []int64
 
-	latest map[string]Reading
+	actions map[int64][]CorrectiveAction
+	latest  map[string]Reading
 }
 
 // NewMemoryRepository crea un repositorio local vacío.
@@ -32,6 +35,7 @@ func NewMemoryRepository() *MemoryRepository {
 		nextReadingID:  1,
 		nextAlertID:    1,
 		nextIncidentID: 1,
+		nextActionID:   1,
 
 		readings: make(
 			[]Reading,
@@ -54,6 +58,10 @@ func NewMemoryRepository() *MemoryRepository {
 		incidentOrder: make(
 			[]int64,
 			0,
+		),
+
+		actions: make(
+			map[int64][]CorrectiveAction,
 		),
 
 		latest: make(
@@ -119,6 +127,9 @@ func (repository *MemoryRepository) Save(
 			repository.incidentOrder,
 			result.Incident.ID,
 		)
+
+		repository.actions[result.Incident.ID] =
+			make([]CorrectiveAction, 0)
 	}
 
 	return nil
@@ -248,7 +259,7 @@ func (repository *MemoryRepository) ListIncidents(
 	return result, nil
 }
 
-// FindIncident devuelve un incidente y la alerta relacionada.
+// FindIncident devuelve un incidente, su alerta y acciones.
 func (repository *MemoryRepository) FindIncident(
 	_ context.Context,
 	incidentID int64,
@@ -278,10 +289,77 @@ func (repository *MemoryRepository) FindIncident(
 			nil
 	}
 
+	storedActions :=
+		repository.actions[incidentID]
+
+	actions := append(
+		[]CorrectiveAction(nil),
+		storedActions...,
+	)
+
 	return IncidentDetail{
 			Incident: incident,
 			Alert:    alert,
+			Actions:  actions,
 		},
 		true,
 		nil
+}
+
+// ApplyIncidentWorkflow guarda una transición BPM y,
+// cuando corresponde, una nueva acción correctiva.
+func (repository *MemoryRepository) ApplyIncidentWorkflow(
+	_ context.Context,
+	detail *IncidentDetail,
+	newAction *CorrectiveAction,
+) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+
+	if _, exists :=
+		repository.incidents[detail.Incident.ID]; !exists {
+		return fmt.Errorf(
+			"el incidente %d no existe",
+			detail.Incident.ID,
+		)
+	}
+
+	if _, exists :=
+		repository.alerts[detail.Alert.ID]; !exists {
+		return fmt.Errorf(
+			"la alerta %d no existe",
+			detail.Alert.ID,
+		)
+	}
+
+	repository.incidents[detail.Incident.ID] =
+		detail.Incident
+
+	repository.alerts[detail.Alert.ID] =
+		detail.Alert
+
+	if newAction != nil {
+		newAction.ID = repository.nextActionID
+		newAction.IncidentID =
+			detail.Incident.ID
+
+		if newAction.CreatedAt.IsZero() {
+			newAction.CreatedAt = time.Now()
+		}
+
+		repository.nextActionID++
+
+		repository.actions[detail.Incident.ID] =
+			append(
+				repository.actions[detail.Incident.ID],
+				*newAction,
+			)
+	}
+
+	detail.Actions = append(
+		[]CorrectiveAction(nil),
+		repository.actions[detail.Incident.ID]...,
+	)
+
+	return nil
 }

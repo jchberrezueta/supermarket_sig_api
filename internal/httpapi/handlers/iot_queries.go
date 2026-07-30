@@ -289,6 +289,22 @@ func (handler *IoTHandler) writeServiceError(
 		return
 	}
 
+	var conflictError *iot.ConflictError
+
+	if errors.As(
+		err,
+		&conflictError,
+	) {
+		WriteError(
+			w,
+			http.StatusConflict,
+			"invalid_state_transition",
+			conflictError.Message,
+		)
+
+		return
+	}
+
 	log.Printf(
 		"error del servicio IoT: %v",
 		err,
