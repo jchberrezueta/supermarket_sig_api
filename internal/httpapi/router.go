@@ -176,6 +176,26 @@ func NewRouter(
 			)
 
 			router.Route(
+				"/abastecimiento",
+				func(router chi.Router) {
+					router.Get(
+						"/resumen",
+						managementHandler.SupplyOverview,
+					)
+
+					router.Get(
+						"/proveedores",
+						managementHandler.SupplierPerformance,
+					)
+
+					router.Get(
+						"/pedidos",
+						managementHandler.SupplyOrders,
+					)
+				},
+			)
+
+			router.Route(
 				"/ventas",
 				func(router chi.Router) {
 					router.Get(
