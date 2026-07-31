@@ -31,11 +31,14 @@ type IoTConfig struct {
 	TemperatureMax float64
 }
 
-// IntegrationConfig contiene la clave de integración con el ERP.
+// IntegrationConfig contiene la configuración de integración con el ERP.
 type IntegrationConfig struct {
-	SyncKey    string
-	ERPBaseURL string
-	Timeout    time.Duration
+	SyncKey          string
+	ERPBaseURL       string
+	Timeout          time.Duration
+	AutoSyncEnabled  bool
+	AutoSyncInterval time.Duration
+	InitialSyncDelay time.Duration
 }
 
 // Config contiene la configuración general de la API SIG.
@@ -60,6 +63,16 @@ func Load() Config {
 	erpTimeoutSeconds := getEnvInt(
 		"ERP_API_TIMEOUT_SECONDS",
 		20,
+	)
+
+	autoSyncIntervalSeconds := getEnvInt(
+		"ERP_AUTO_SYNC_INTERVAL_SECONDS",
+		60,
+	)
+
+	initialSyncDelaySeconds := getEnvInt(
+		"ERP_INITIAL_SYNC_DELAY_SECONDS",
+		5,
 	)
 
 	return Config{
@@ -143,6 +156,16 @@ func Load() Config {
 			),
 			Timeout: time.Duration(
 				erpTimeoutSeconds,
+			) * time.Second,
+			AutoSyncEnabled: getEnvBool(
+				"ERP_AUTO_SYNC_ENABLED",
+				false,
+			),
+			AutoSyncInterval: time.Duration(
+				autoSyncIntervalSeconds,
+			) * time.Second,
+			InitialSyncDelay: time.Duration(
+				initialSyncDelaySeconds,
 			) * time.Second,
 		},
 	}
