@@ -84,8 +84,18 @@ func NewRouter(
 		cfg.IoT.DeviceKey,
 	)
 
-	erpRepository :=
-		erpdata.NewMemoryRepository()
+	var erpRepository erpdata.Repository
+
+	if cfg.Database.Enabled &&
+		db != nil {
+		erpRepository =
+			erpdata.NewOracleRepository(
+				db,
+			)
+	} else {
+		erpRepository =
+			erpdata.NewMemoryRepository()
+	}
 
 	erpService :=
 		erpdata.NewService(
