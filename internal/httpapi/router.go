@@ -5,23 +5,85 @@ import (
 	"net/http"
 
 	"supermarket-sig-api/internal/config"
+	"supermarket-sig-api/internal/erpclient"
+	"supermarket-sig-api/internal/erpdata"
 	"supermarket-sig-api/internal/httpapi/handlers"
 	"supermarket-sig-api/internal/iot"
+	"supermarket-sig-api/internal/management"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-
-	"supermarket-sig-api/internal/erpdata"
-	"supermarket-sig-api/internal/management"
-
-	"supermarket-sig-api/internal/erpclient"
 )
 
+// Runtime contiene el router y las dependencias compartidas
+// necesarias durante la ejecución de la API.
+type Runtime struct {
+	Handler    http.Handler
+	ERPService *erpdata.Service
+	ERPSource  erpdata.SnapshotSource
+}
+
+// NewRuntime construye las dependencias compartidas de la API.
+func NewRuntime(
+	cfg config.Config,
+	db *sql.DB,
+) Runtime {
+	var erpRepository erpdata.Repository
+
+	if cfg.Database.Enabled &&
+		db != nil {
+		erpRepository =
+			erpdata.NewOracleRepository(
+				db,
+			)
+	} else {
+		erpRepository =
+			erpdata.NewMemoryRepository()
+	}
+
+	erpService :=
+		erpdata.NewService(
+			erpRepository,
+		)
+
+	erpSource :=
+		erpclient.NewClient(
+			cfg.Integration.ERPBaseURL,
+			cfg.Integration.SyncKey,
+			cfg.Integration.Timeout,
+		)
+
+	return Runtime{
+		Handler: newRouter(
+			cfg,
+			db,
+			erpService,
+			erpSource,
+		),
+
+		ERPService: erpService,
+		ERPSource:  erpSource,
+	}
+}
+
 // NewRouter construye las rutas y middlewares de la API.
+// Se conserva para pruebas y usos que solo necesitan el handler HTTP.
 func NewRouter(
 	cfg config.Config,
 	db *sql.DB,
+) http.Handler {
+	return NewRuntime(
+		cfg,
+		db,
+	).Handler
+}
+
+func newRouter(
+	cfg config.Config,
+	db *sql.DB,
+	erpService *erpdata.Service,
+	erpSource erpdata.SnapshotSource,
 ) http.Handler {
 	router := chi.NewRouter()
 
@@ -83,31 +145,6 @@ func NewRouter(
 		iotService,
 		cfg.IoT.DeviceKey,
 	)
-
-	var erpRepository erpdata.Repository
-
-	if cfg.Database.Enabled &&
-		db != nil {
-		erpRepository =
-			erpdata.NewOracleRepository(
-				db,
-			)
-	} else {
-		erpRepository =
-			erpdata.NewMemoryRepository()
-	}
-
-	erpService :=
-		erpdata.NewService(
-			erpRepository,
-		)
-
-	erpSource :=
-		erpclient.NewClient(
-			cfg.Integration.ERPBaseURL,
-			cfg.Integration.SyncKey,
-			cfg.Integration.Timeout,
-		)
 
 	integrationHandler :=
 		handlers.NewIntegrationHandler(

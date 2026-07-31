@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,6 +21,7 @@ func (err *ValidationError) Error() string {
 // Service contiene las reglas de sincronización.
 type Service struct {
 	repository Repository
+	importMu   sync.Mutex
 }
 
 // NewService crea el servicio de integración.
@@ -48,6 +50,9 @@ func (service *Service) ImportSnapshot(
 	); err != nil {
 		return ImportResult{}, err
 	}
+
+	service.importMu.Lock()
+	defer service.importMu.Unlock()
 
 	result := ImportResult{
 		ContractVersion: snapshot.ContractVersion,
