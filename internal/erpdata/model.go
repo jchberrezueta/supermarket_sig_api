@@ -2,11 +2,19 @@ package erpdata
 
 import "time"
 
+const (
+	// SnapshotContractVersion identifica la versión compatible del contrato ERP → SIG.
+	SnapshotContractVersion = "1.0"
+
+	// SnapshotSourceERP identifica al sistema operacional que produce el snapshot.
+	SnapshotSourceERP = "supermarket-erp"
+)
+
 // Category representa una categoría sincronizada desde el ERP.
 type Category struct {
-	OriginID int64  `json:"idOrigen"`
-	Name     string `json:"nombre"`
-	Status   string `json:"estado"`
+	OriginID    int64  `json:"idOrigen"`
+	Name        string `json:"nombre"`
+	Description string `json:"descripcion,omitempty"`
 }
 
 // Company representa una empresa proveedora del ERP.
@@ -49,7 +57,6 @@ type Customer struct {
 	Name           string `json:"nombre"`
 	Email          string `json:"correo,omitempty"`
 	Phone          string `json:"telefono,omitempty"`
-	Status         string `json:"estado"`
 }
 
 // Sale representa la cabecera de una venta.
@@ -129,7 +136,9 @@ type InventoryMovement struct {
 
 // Snapshot contiene una copia empresarial completa del ERP.
 type Snapshot struct {
-	GeneratedAt time.Time `json:"fechaGeneracion"`
+	ContractVersion string    `json:"versionContrato"`
+	Source          string    `json:"fuente"`
+	GeneratedAt     time.Time `json:"fechaGeneracion"`
 
 	Categories []Category `json:"categorias"`
 	Companies  []Company  `json:"empresas"`
@@ -164,10 +173,11 @@ type ImportCounts struct {
 
 // ImportResult representa una sincronización terminada.
 type ImportResult struct {
-	Mode        string       `json:"modo"`
-	GeneratedAt time.Time    `json:"fechaGeneracion"`
-	ImportedAt  time.Time    `json:"fechaImportacion"`
-	Counts      ImportCounts `json:"registros"`
+	ContractVersion string       `json:"versionContrato"`
+	Mode            string       `json:"modo"`
+	GeneratedAt     time.Time    `json:"fechaGeneracion"`
+	ImportedAt      time.Time    `json:"fechaImportacion"`
+	Counts          ImportCounts `json:"registros"`
 }
 
 // IntegrationState representa el estado local de sincronización.

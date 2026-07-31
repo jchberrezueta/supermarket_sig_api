@@ -12,13 +12,17 @@ import (
 )
 
 const validSnapshotJSON = `{
+
+	"versionContrato": "1.0",
+	"fuente": "supermarket-erp",
+	"fechaGeneracion": "2026-07-30T00:30:00-05:00",
 	"fechaGeneracion": "2026-07-30T00:30:00-05:00",
 
 	"categorias": [
 		{
 			"idOrigen": 1,
 			"nombre": "Refrigerados",
-			"estado": "activo"
+			"descripcion": "Productos que requieren refrigeración."
 		}
 	],
 
@@ -64,8 +68,7 @@ const validSnapshotJSON = `{
 			"identificacion": "0999999998",
 			"nombre": "Cliente académico",
 			"correo": "cliente@example.com",
-			"telefono": "0999999998",
-			"estado": "activo"
+			"telefono": "0999999998"
 		}
 	],
 
@@ -129,7 +132,7 @@ const validSnapshotJSON = `{
 			"idProductoOrigen": 1,
 			"fechaCaducidad": "2026-08-30T00:00:00-05:00",
 			"stock": 9,
-			"estado": "vigente"
+			"estado": "correcto"		
 		}
 	],
 
@@ -361,6 +364,86 @@ func TestIntegrationStateAfterImport(
 		t.Fatalf(
 			"se esperaba un movimiento y se obtuvieron %d",
 			body.Data.Counts.Movements,
+		)
+	}
+}
+
+func TestSnapshotRejectsUnsupportedContractVersion(
+	t *testing.T,
+) {
+	router := NewRouter(
+		integrationTestConfig(),
+		nil,
+	)
+
+	invalidSnapshotJSON := strings.Replace(
+		validSnapshotJSON,
+		`"versionContrato": "1.0"`,
+		`"versionContrato": "2.0"`,
+		1,
+	)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/sig/integracion/snapshot",
+		strings.NewReader(
+			invalidSnapshotJSON,
+		),
+	)
+
+	request.Header.Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	request.Header.Set(
+		"X-SIG-Key",
+		"test-sync-key",
+	)
+
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"se esperaba %d y se obtuvo %d: %s",
+			http.StatusBadRequest,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	var body struct {
+		Success bool `json:"success"`
+
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+
+	if err := json.NewDecoder(
+		response.Body,
+	).Decode(&body); err != nil {
+		t.Fatalf(
+			"no se pudo leer la respuesta: %v",
+			err,
+		)
+	}
+
+	if body.Success {
+		t.Fatal(
+			"se esperaba success=false",
+		)
+	}
+
+	if body.Error.Code != "invalid_snapshot" {
+		t.Fatalf(
+			"código de error inesperado: %q",
+			body.Error.Code,
 		)
 	}
 }

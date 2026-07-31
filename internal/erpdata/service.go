@@ -42,10 +42,6 @@ func (service *Service) ImportSnapshot(
 		&snapshot,
 	)
 
-	if snapshot.GeneratedAt.IsZero() {
-		snapshot.GeneratedAt = time.Now()
-	}
-
 	if err := validateSnapshot(
 		snapshot,
 	); err != nil {
@@ -53,9 +49,10 @@ func (service *Service) ImportSnapshot(
 	}
 
 	result := ImportResult{
-		Mode:        "completa",
-		GeneratedAt: snapshot.GeneratedAt,
-		ImportedAt:  time.Now(),
+		ContractVersion: snapshot.ContractVersion,
+		Mode:            "completa",
+		GeneratedAt:     snapshot.GeneratedAt,
+		ImportedAt:      time.Now(),
 		Counts: ImportCounts{
 			Categories:  len(snapshot.Categories),
 			Companies:   len(snapshot.Companies),
@@ -101,6 +98,28 @@ func (service *Service) State(
 func validateSnapshot(
 	snapshot Snapshot,
 ) error {
+	if strings.TrimSpace(snapshot.ContractVersion) != SnapshotContractVersion {
+		return validationError(
+			"La versión de contrato %q no es compatible; se esperaba %q.",
+			snapshot.ContractVersion,
+			SnapshotContractVersion,
+		)
+	}
+
+	if strings.TrimSpace(snapshot.Source) != SnapshotSourceERP {
+		return validationError(
+			"La fuente del snapshot %q no es válida; se esperaba %q.",
+			snapshot.Source,
+			SnapshotSourceERP,
+		)
+	}
+
+	if snapshot.GeneratedAt.IsZero() {
+		return validationError(
+			"El snapshot no contiene una fecha de generación válida.",
+		)
+	}
+
 	categoryIDs := make(
 		map[int64]struct{},
 	)
