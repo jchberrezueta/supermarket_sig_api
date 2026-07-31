@@ -293,3 +293,97 @@ func TestSalesPeriodValidation(
 		)
 	}
 }
+
+func TestSalesByCategory(
+	t *testing.T,
+) {
+	router := prepareSalesRouter(
+		t,
+	)
+
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/sig/ventas/categorias?desde=2026-07-01&hasta=2026-07-31&limite=10",
+		nil,
+	)
+
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf(
+			"se esperaba %d y se obtuvo %d: %s",
+			http.StatusOK,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	var body struct {
+		Success bool                            `json:"success"`
+		Data    management.CategorySalesRanking `json:"data"`
+	}
+
+	if err := json.NewDecoder(
+		response.Body,
+	).Decode(&body); err != nil {
+		t.Fatalf(
+			"no se pudo leer el ranking por categoría: %v",
+			err,
+		)
+	}
+
+	if !body.Success {
+		t.Fatal(
+			"se esperaba success=true",
+		)
+	}
+
+	if body.Data.Total != 1 {
+		t.Fatalf(
+			"se esperaba una categoría y se obtuvieron %d",
+			body.Data.Total,
+		)
+	}
+
+	if len(body.Data.Items) != 1 {
+		t.Fatalf(
+			"se esperaba un elemento y se obtuvieron %d",
+			len(body.Data.Items),
+		)
+	}
+
+	item := body.Data.Items[0]
+
+	if item.CategoryID != 1 {
+		t.Fatalf(
+			"categoría inesperada: %d",
+			item.CategoryID,
+		)
+	}
+
+	if item.Name != "Refrigerados" {
+		t.Fatalf(
+			"nombre de categoría inesperado: %q",
+			item.Name,
+		)
+	}
+
+	if item.Units != 1 {
+		t.Fatalf(
+			"unidades inesperadas: %d",
+			item.Units,
+		)
+	}
+
+	if item.Revenue != 2.5 {
+		t.Fatalf(
+			"ingresos inesperados: %.2f",
+			item.Revenue,
+		)
+	}
+}

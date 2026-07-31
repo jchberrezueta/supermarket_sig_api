@@ -42,3 +42,19 @@ type ProductSalesRanking struct {
 	Total  int                `json:"total"`
 	Limit  int                `json:"limite"`
 }
+
+// CategorySalesItem representa el desempeño comercial de una categoría.
+type CategorySalesItem struct {
+	CategoryID int64   `json:"idCategoriaOrigen"`
+	Name       string  `json:"nombre"`
+	Units      int64   `json:"unidadesVendidas"`
+	Revenue    float64 `json:"ingresos"`
+}
+
+// CategorySalesRanking contiene las categorías con mayores ventas.
+type CategorySalesRanking struct {
+	Period SalesPeriod         `json:"periodo"`
+	Items  []CategorySalesItem `json:"items"`
+	Total  int                 `json:"total"`
+	Limit  int                 `json:"limite"`
+}

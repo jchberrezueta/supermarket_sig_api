@@ -407,3 +407,153 @@ func saleWithinPeriod(
 
 	return true
 }
+
+// SalesByCategory calcula las ventas agrupadas por categoría.
+func (service *Service) SalesByCategory(
+	ctx context.Context,
+	period SalesPeriod,
+	limit int,
+) (
+	CategorySalesRanking,
+	error,
+) {
+	snapshot, exists, err :=
+		service.erpService.CurrentSnapshot(
+			ctx,
+		)
+
+	if err != nil {
+		return CategorySalesRanking{},
+			fmt.Errorf(
+				"no se pudo consultar la información empresarial: %w",
+				err,
+			)
+	}
+
+	result := CategorySalesRanking{
+		Period: period,
+		Limit:  limit,
+		Items: make(
+			[]CategorySalesItem,
+			0,
+		),
+	}
+
+	if !exists {
+		return result, nil
+	}
+
+	categoryNames := make(
+		map[int64]string,
+	)
+
+	for _, category := range snapshot.Categories {
+		categoryNames[category.OriginID] =
+			category.Name
+	}
+
+	productCategories := make(
+		map[int64]int64,
+	)
+
+	for _, product := range snapshot.Products {
+		productCategories[product.OriginID] =
+			product.CategoryID
+	}
+
+	completedSaleIDs := make(
+		map[int64]struct{},
+	)
+
+	for _, sale := range snapshot.Sales {
+		if !saleWithinPeriod(
+			sale,
+			period,
+		) {
+			continue
+		}
+
+		if !isCompletedStatus(
+			normalize(sale.Status),
+		) {
+			continue
+		}
+
+		completedSaleIDs[sale.OriginID] =
+			struct{}{}
+	}
+
+	categories := make(
+		map[int64]CategorySalesItem,
+	)
+
+	for _, detail := range snapshot.SaleDetails {
+		if _, exists :=
+			completedSaleIDs[detail.SaleID]; !exists {
+			continue
+		}
+
+		categoryID, productExists :=
+			productCategories[detail.ProductID]
+
+		if !productExists {
+			continue
+		}
+
+		item := categories[categoryID]
+
+		item.CategoryID = categoryID
+		item.Name = categoryNames[categoryID]
+		item.Units += detail.Quantity
+		item.Revenue += detail.Total
+
+		categories[categoryID] = item
+	}
+
+	for _, item := range categories {
+		item.Revenue =
+			roundTwoDecimals(
+				item.Revenue,
+			)
+
+		result.Items = append(
+			result.Items,
+			item,
+		)
+	}
+
+	sort.Slice(
+		result.Items,
+		func(
+			left int,
+			right int,
+		) bool {
+			leftItem := result.Items[left]
+			rightItem := result.Items[right]
+
+			if leftItem.Revenue !=
+				rightItem.Revenue {
+				return leftItem.Revenue >
+					rightItem.Revenue
+			}
+
+			if leftItem.Units !=
+				rightItem.Units {
+				return leftItem.Units >
+					rightItem.Units
+			}
+
+			return leftItem.Name <
+				rightItem.Name
+		},
+	)
+
+	result.Total = len(result.Items)
+
+	if len(result.Items) > limit {
+		result.Items =
+			result.Items[:limit]
+	}
+
+	return result, nil
+}

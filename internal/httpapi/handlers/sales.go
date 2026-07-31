@@ -137,6 +137,55 @@ func (handler *ManagementHandler) TopSellingProducts(
 	)
 }
 
+// SalesByCategory devuelve las ventas agrupadas por categoría.
+func (handler *ManagementHandler) SalesByCategory(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	period, ok := parseSalesPeriod(
+		w,
+		r,
+	)
+
+	if !ok {
+		return
+	}
+
+	limit, ok := parseSalesLimit(
+		w,
+		r,
+	)
+
+	if !ok {
+		return
+	}
+
+	result, err :=
+		handler.service.SalesByCategory(
+			r.Context(),
+			period,
+			limit,
+		)
+
+	if err != nil {
+		handler.writeManagementError(
+			w,
+			err,
+		)
+
+		return
+	}
+
+	WriteJSON(
+		w,
+		http.StatusOK,
+		successResponse{
+			Success: true,
+			Data:    result,
+		},
+	)
+}
+
 func parseSalesPeriod(
 	w http.ResponseWriter,
 	r *http.Request,

@@ -212,6 +212,11 @@ func NewRouter(
 						"/productos",
 						managementHandler.TopSellingProducts,
 					)
+
+					router.Get(
+						"/categorias",
+						managementHandler.SalesByCategory,
+					)
 				},
 			)
 
