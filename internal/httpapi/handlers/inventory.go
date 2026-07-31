@@ -133,6 +133,62 @@ func (handler *ManagementHandler) ExpiringLots(
 	)
 }
 
+// InventoryMovements devuelve la trazabilidad del inventario.
+func (handler *ManagementHandler) InventoryMovements(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	period, ok := parseSalesPeriod(
+		w,
+		r,
+	)
+
+	if !ok {
+		return
+	}
+
+	limit, ok := parseInventoryLimit(
+		w,
+		r,
+	)
+
+	if !ok {
+		return
+	}
+
+	movementType := strings.TrimSpace(
+		r.URL.Query().Get(
+			"tipo",
+		),
+	)
+
+	result, err :=
+		handler.service.InventoryMovements(
+			r.Context(),
+			period,
+			movementType,
+			limit,
+		)
+
+	if err != nil {
+		handler.writeManagementError(
+			w,
+			err,
+		)
+
+		return
+	}
+
+	WriteJSON(
+		w,
+		http.StatusOK,
+		successResponse{
+			Success: true,
+			Data:    result,
+		},
+	)
+}
+
 func parseExpirationDays(
 	w http.ResponseWriter,
 	r *http.Request,

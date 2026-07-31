@@ -50,3 +50,42 @@ type ExpirationReport struct {
 	Total int                 `json:"total"`
 	Limit int                 `json:"limite"`
 }
+
+// InventoryMovementSummary contiene indicadores de movimientos.
+type InventoryMovementSummary struct {
+	TotalMovements int   `json:"movimientos"`
+	Entries        int   `json:"entradas"`
+	Outputs        int   `json:"salidas"`
+	EntryUnits     int64 `json:"unidadesEntrada"`
+	OutputUnits    int64 `json:"unidadesSalida"`
+	NetUnits       int64 `json:"unidadesNetas"`
+}
+
+// InventoryMovementItem representa un movimiento sincronizado.
+type InventoryMovementItem struct {
+	MovementID int64  `json:"idMovimientoOrigen"`
+	ProductID  int64  `json:"idProductoOrigen"`
+	Product    string `json:"producto"`
+	LotID      *int64 `json:"idLoteOrigen,omitempty"`
+	Type       string `json:"tipo"`
+	Quantity   int64  `json:"cantidad"`
+
+	ProductStockBefore *int64 `json:"stockProductoAnterior,omitempty"`
+	ProductStockAfter  *int64 `json:"stockProductoPosterior,omitempty"`
+	LotStockBefore     *int64 `json:"stockLoteAnterior,omitempty"`
+	LotStockAfter      *int64 `json:"stockLotePosterior,omitempty"`
+
+	SourceDocument string    `json:"documentoOrigen,omitempty"`
+	SourceUser     string    `json:"usuarioOrigen,omitempty"`
+	Date           time.Time `json:"fechaMovimiento"`
+}
+
+// InventoryMovementReport contiene la trazabilidad del inventario.
+type InventoryMovementReport struct {
+	Period  SalesPeriod              `json:"periodo"`
+	Type    string                   `json:"tipo,omitempty"`
+	Summary InventoryMovementSummary `json:"resumen"`
+	Items   []InventoryMovementItem  `json:"items"`
+	Total   int                      `json:"total"`
+	Limit   int                      `json:"limite"`
+}

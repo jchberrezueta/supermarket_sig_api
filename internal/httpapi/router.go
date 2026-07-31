@@ -172,6 +172,11 @@ func NewRouter(
 						"/caducidad",
 						managementHandler.ExpiringLots,
 					)
+
+					router.Get(
+						"/movimientos",
+						managementHandler.InventoryMovements,
+					)
 				},
 			)
 
