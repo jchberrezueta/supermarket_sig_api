@@ -13,26 +13,49 @@ import (
 
 	"supermarket-sig-api/internal/config"
 	"supermarket-sig-api/internal/database"
+	"supermarket-sig-api/internal/erpdata"
 	"supermarket-sig-api/internal/httpapi"
 )
 
 func main() {
 	cfg := config.Load()
 
-	db := initializeDatabase(cfg)
+	db := initializeDatabase(
+		cfg,
+	)
+
+	apiRuntime :=
+		httpapi.NewRuntime(
+			cfg,
+			db,
+		)
+
+	appContext, stopApplication :=
+		signal.NotifyContext(
+			context.Background(),
+			os.Interrupt,
+			syscall.SIGTERM,
+		)
+
+	autoSyncDone :=
+		startAutoSync(
+			appContext,
+			cfg,
+			apiRuntime,
+		)
 
 	server := &http.Server{
 		Addr: ":" + cfg.Port,
 
-		Handler: httpapi.NewRouter(
-			cfg,
-			db,
-		),
+		Handler: apiRuntime.Handler,
 
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
+
+		ReadTimeout: 15 * time.Second,
+
+		WriteTimeout: 30 * time.Second,
+
+		IdleTimeout: 60 * time.Second,
 	}
 
 	serverErrors := make(
@@ -59,22 +82,12 @@ func main() {
 		serverErrors <- server.ListenAndServe()
 	}()
 
-	shutdownSignal := make(
-		chan os.Signal,
-		1,
-	)
-
-	signal.Notify(
-		shutdownSignal,
-		os.Interrupt,
-		syscall.SIGTERM,
-	)
+	var executionError error
 
 	select {
-	case signal := <-shutdownSignal:
-		log.Printf(
-			"Se recibió la señal %s. Cerrando API...",
-			signal,
+	case <-appContext.Done():
+		log.Println(
+			"Se recibió una señal de apagado. Cerrando API...",
 		)
 
 	case err := <-serverErrors:
@@ -82,24 +95,106 @@ func main() {
 			err,
 			http.ErrServerClosed,
 		) {
-			log.Fatalf(
+			executionError = err
+
+			log.Printf(
 				"No se pudo ejecutar la API: %v",
 				err,
 			)
 		}
 	}
 
+	stopApplication()
+
 	shutdownServer(
 		server,
+	)
+
+	waitForAutoSync(
+		autoSyncDone,
 	)
 
 	closeDatabase(
 		db,
 	)
 
+	if executionError != nil {
+		log.Println(
+			"SuperMarket SIG API detenida debido a un error.",
+		)
+
+		os.Exit(
+			1,
+		)
+	}
+
 	log.Println(
 		"SuperMarket SIG API detenida correctamente.",
 	)
+}
+
+func startAutoSync(
+	ctx context.Context,
+	cfg config.Config,
+	apiRuntime httpapi.Runtime,
+) <-chan struct{} {
+	done := make(
+		chan struct{},
+	)
+
+	if !cfg.Integration.AutoSyncEnabled {
+		close(
+			done,
+		)
+
+		log.Println(
+			"Sincronización automática deshabilitada.",
+		)
+
+		return done
+	}
+
+	worker :=
+		erpdata.NewAutoSyncWorker(
+			apiRuntime.ERPService,
+			apiRuntime.ERPSource,
+			cfg.Integration.InitialSyncDelay,
+			cfg.Integration.AutoSyncInterval,
+		)
+
+	log.Printf(
+		"Sincronización automática habilitada: retraso inicial=%s, intervalo=%s.",
+		cfg.Integration.InitialSyncDelay,
+		cfg.Integration.AutoSyncInterval,
+	)
+
+	go func() {
+		defer close(
+			done,
+		)
+
+		worker.Run(
+			ctx,
+		)
+	}()
+
+	return done
+}
+
+func waitForAutoSync(
+	done <-chan struct{},
+) {
+	select {
+	case <-done:
+		return
+
+	case <-time.After(
+		10 * time.Second,
+	):
+		log.Println(
+			"Se agotó el tiempo de espera para detener la sincronización automática.",
+		)
+	}
 }
 
 func initializeDatabase(
