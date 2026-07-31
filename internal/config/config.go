@@ -31,6 +31,13 @@ type IoTConfig struct {
 	TemperatureMax float64
 }
 
+// AuthConfig contiene la configuración para validar
+// los tokens administrativos emitidos por NestJS.
+type AuthConfig struct {
+	JWTSecret    string
+	AllowedRoles []string
+}
+
 // IntegrationConfig contiene la configuración de integración con el ERP.
 type IntegrationConfig struct {
 	SyncKey          string
@@ -48,6 +55,7 @@ type Config struct {
 	CORSOrigins    []string
 	Database       DatabaseConfig
 	IoT            IoTConfig
+	Auth           AuthConfig
 	Integration    IntegrationConfig
 }
 
@@ -143,6 +151,18 @@ func Load() Config {
 			TemperatureMax: getEnvFloat(
 				"IOT_TEMPERATURE_MAX",
 				8,
+			),
+		},
+		Auth: AuthConfig{
+			JWTSecret: getEnv(
+				"JWT_SECRET",
+				"",
+			),
+			AllowedRoles: splitCSV(
+				getEnv(
+					"SIG_ALLOWED_ROLES",
+					"padmin,pgerente",
+				),
 			),
 		},
 		Integration: IntegrationConfig{
