@@ -9,39 +9,41 @@ import (
 	"net/http"
 	"strings"
 
+	"supermarket-sig-api/internal/erpclient"
 	"supermarket-sig-api/internal/erpdata"
 )
 
 // IntegrationHandler gestiona la sincronización con el ERP.
 type IntegrationHandler struct {
 	service *erpdata.Service
+	source  erpdata.SnapshotSource
 	syncKey string
 }
 
 // NewIntegrationHandler crea el controlador de integración.
 func NewIntegrationHandler(
 	service *erpdata.Service,
+	source erpdata.SnapshotSource,
 	syncKey string,
 ) *IntegrationHandler {
 	return &IntegrationHandler{
 		service: service,
+		source:  source,
+
 		syncKey: strings.TrimSpace(
 			syncKey,
 		),
 	}
 }
 
-// ImportSnapshot importa una copia completa del ERP.
+// ImportSnapshot importa manualmente una copia completa del ERP.
 func (handler *IntegrationHandler) ImportSnapshot(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
 	if !handler.authorized(r) {
-		WriteError(
+		handler.writeUnauthorized(
 			w,
-			http.StatusUnauthorized,
-			"invalid_sync_key",
-			"La clave de sincronización no es válida.",
 		)
 
 		return
@@ -94,32 +96,9 @@ func (handler *IntegrationHandler) ImportSnapshot(
 		)
 
 	if err != nil {
-		var validationError *erpdata.ValidationError
-
-		if errors.As(
-			err,
-			&validationError,
-		) {
-			WriteError(
-				w,
-				http.StatusBadRequest,
-				"invalid_snapshot",
-				validationError.Message,
-			)
-
-			return
-		}
-
-		log.Printf(
-			"no se pudo importar el snapshot: %v",
-			err,
-		)
-
-		WriteError(
+		handler.writeImportError(
 			w,
-			http.StatusInternalServerError,
-			"snapshot_import_failed",
-			"No se pudo importar la información del ERP.",
+			err,
 		)
 
 		return
@@ -128,6 +107,103 @@ func (handler *IntegrationHandler) ImportSnapshot(
 	WriteJSON(
 		w,
 		http.StatusCreated,
+		successResponse{
+			Success: true,
+			Data:    result,
+		},
+	)
+}
+
+// Synchronize solicita el snapshot directamente a NestJS.
+func (handler *IntegrationHandler) Synchronize(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	if !handler.authorized(r) {
+		handler.writeUnauthorized(
+			w,
+		)
+
+		return
+	}
+
+	result, err :=
+		handler.service.Synchronize(
+			r.Context(),
+			handler.source,
+		)
+
+	if err != nil {
+		var validationError *erpdata.ValidationError
+
+		if errors.As(
+			err,
+			&validationError,
+		) {
+			WriteError(
+				w,
+				http.StatusBadGateway,
+				"invalid_upstream_snapshot",
+				validationError.Message,
+			)
+
+			return
+		}
+
+		if errors.Is(
+			err,
+			erpclient.ErrNotConfigured,
+		) {
+			WriteError(
+				w,
+				http.StatusServiceUnavailable,
+				"erp_integration_not_configured",
+				"La conexión con el ERP no está configurada.",
+			)
+
+			return
+		}
+
+		var upstreamError *erpclient.UpstreamError
+
+		if errors.As(
+			err,
+			&upstreamError,
+		) {
+			log.Printf(
+				"el ERP respondió con estado %d: %s",
+				upstreamError.StatusCode,
+				upstreamError.Message,
+			)
+
+			WriteError(
+				w,
+				http.StatusBadGateway,
+				"erp_upstream_error",
+				"El ERP rechazó la solicitud de sincronización.",
+			)
+
+			return
+		}
+
+		log.Printf(
+			"no se pudo sincronizar con el ERP: %v",
+			err,
+		)
+
+		WriteError(
+			w,
+			http.StatusBadGateway,
+			"erp_sync_failed",
+			"No se pudo obtener la información del ERP.",
+		)
+
+		return
+	}
+
+	WriteJSON(
+		w,
+		http.StatusOK,
 		successResponse{
 			Success: true,
 			Data:    result,
@@ -171,6 +247,50 @@ func (handler *IntegrationHandler) State(
 	)
 }
 
+func (handler *IntegrationHandler) writeImportError(
+	w http.ResponseWriter,
+	err error,
+) {
+	var validationError *erpdata.ValidationError
+
+	if errors.As(
+		err,
+		&validationError,
+	) {
+		WriteError(
+			w,
+			http.StatusBadRequest,
+			"invalid_snapshot",
+			validationError.Message,
+		)
+
+		return
+	}
+
+	log.Printf(
+		"no se pudo importar el snapshot: %v",
+		err,
+	)
+
+	WriteError(
+		w,
+		http.StatusInternalServerError,
+		"snapshot_import_failed",
+		"No se pudo importar la información del ERP.",
+	)
+}
+
+func (handler *IntegrationHandler) writeUnauthorized(
+	w http.ResponseWriter,
+) {
+	WriteError(
+		w,
+		http.StatusUnauthorized,
+		"invalid_sync_key",
+		"La clave de sincronización no es válida.",
+	)
+}
+
 func (handler *IntegrationHandler) authorized(
 	r *http.Request,
 ) bool {
@@ -188,8 +308,19 @@ func (handler *IntegrationHandler) authorized(
 		return false
 	}
 
+	expectedBytes :=
+		[]byte(handler.syncKey)
+
+	providedBytes :=
+		[]byte(providedKey)
+
+	if len(expectedBytes) !=
+		len(providedBytes) {
+		return false
+	}
+
 	return subtle.ConstantTimeCompare(
-		[]byte(providedKey),
-		[]byte(handler.syncKey),
+		providedBytes,
+		expectedBytes,
 	) == 1
 }

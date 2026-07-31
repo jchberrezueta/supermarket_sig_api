@@ -2,6 +2,7 @@ package erpdata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -81,6 +82,40 @@ func (service *Service) ImportSnapshot(
 	}
 
 	return result, nil
+}
+
+// Synchronize obtiene el snapshot desde el ERP y lo importa.
+func (service *Service) Synchronize(
+	ctx context.Context,
+	source SnapshotSource,
+) (
+	ImportResult,
+	error,
+) {
+	if source == nil {
+		return ImportResult{},
+			errors.New(
+				"la fuente de sincronización no está configurada",
+			)
+	}
+
+	snapshot, err :=
+		source.FetchSnapshot(
+			ctx,
+		)
+
+	if err != nil {
+		return ImportResult{},
+			fmt.Errorf(
+				"no se pudo obtener el snapshot del ERP: %w",
+				err,
+			)
+	}
+
+	return service.ImportSnapshot(
+		ctx,
+		snapshot,
+	)
 }
 
 // State devuelve el estado de sincronización.
@@ -234,7 +269,7 @@ func validateSnapshot(
 	)
 
 	for _, customer := range snapshot.Customers {
-		if err := addUniqueID(
+		if err := addUniqueNonNegativeID(
 			customerIDs,
 			customer.OriginID,
 			"cliente",
@@ -543,6 +578,31 @@ func addUniqueID(
 	return nil
 }
 
+func addUniqueNonNegativeID(
+	ids map[int64]struct{},
+	id int64,
+	entity string,
+) error {
+	if id < 0 {
+		return validationError(
+			"Existe una entidad %s con identificador negativo.",
+			entity,
+		)
+	}
+
+	if _, exists := ids[id]; exists {
+		return validationError(
+			"El identificador %d está repetido en %s.",
+			id,
+			entity,
+		)
+	}
+
+	ids[id] = struct{}{}
+
+	return nil
+}
+
 func validationError(
 	format string,
 	arguments ...any,
@@ -553,6 +613,17 @@ func validationError(
 			arguments...,
 		),
 	}
+}
+
+// SnapshotSource representa una fuente capaz de entregar
+// el contrato empresarial del ERP.
+type SnapshotSource interface {
+	FetchSnapshot(
+		ctx context.Context,
+	) (
+		Snapshot,
+		error,
+	)
 }
 
 func normalizeSnapshot(

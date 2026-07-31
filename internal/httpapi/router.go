@@ -14,6 +14,8 @@ import (
 
 	"supermarket-sig-api/internal/erpdata"
 	"supermarket-sig-api/internal/management"
+
+	"supermarket-sig-api/internal/erpclient"
 )
 
 // NewRouter construye las rutas y middlewares de la API.
@@ -90,9 +92,17 @@ func NewRouter(
 			erpRepository,
 		)
 
+	erpSource :=
+		erpclient.NewClient(
+			cfg.Integration.ERPBaseURL,
+			cfg.Integration.SyncKey,
+			cfg.Integration.Timeout,
+		)
+
 	integrationHandler :=
 		handlers.NewIntegrationHandler(
 			erpService,
+			erpSource,
 			cfg.Integration.SyncKey,
 		)
 
@@ -143,6 +153,11 @@ func NewRouter(
 			router.Route(
 				"/integracion",
 				func(router chi.Router) {
+					router.Post(
+						"/sincronizar",
+						integrationHandler.Synchronize,
+					)
+
 					router.Post(
 						"/snapshot",
 						integrationHandler.ImportSnapshot,

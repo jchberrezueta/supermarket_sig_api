@@ -33,7 +33,9 @@ type IoTConfig struct {
 
 // IntegrationConfig contiene la clave de integración con el ERP.
 type IntegrationConfig struct {
-	SyncKey string
+	SyncKey    string
+	ERPBaseURL string
+	Timeout    time.Duration
 }
 
 // Config contiene la configuración general de la API SIG.
@@ -53,6 +55,11 @@ func Load() Config {
 	lifetimeMinutes := getEnvInt(
 		"DB_CONNECTION_MAX_LIFETIME_MINUTES",
 		30,
+	)
+
+	erpTimeoutSeconds := getEnvInt(
+		"ERP_API_TIMEOUT_SECONDS",
+		20,
 	)
 
 	return Config{
@@ -130,6 +137,13 @@ func Load() Config {
 				"SIG_SYNC_KEY",
 				"",
 			),
+			ERPBaseURL: getEnv(
+				"ERP_API_BASE_URL",
+				"http://localhost:3001/api",
+			),
+			Timeout: time.Duration(
+				erpTimeoutSeconds,
+			) * time.Second,
 		},
 	}
 }

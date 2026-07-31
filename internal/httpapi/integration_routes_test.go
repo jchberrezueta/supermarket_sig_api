@@ -447,3 +447,107 @@ func TestSnapshotRejectsUnsupportedContractVersion(
 		)
 	}
 }
+
+func TestSnapshotAcceptsConsumerFinalCustomerIDZero(
+	t *testing.T,
+) {
+	router := NewRouter(
+		integrationTestConfig(),
+		nil,
+	)
+
+	var snapshot erpdata.Snapshot
+
+	if err := json.Unmarshal(
+		[]byte(validSnapshotJSON),
+		&snapshot,
+	); err != nil {
+		t.Fatalf(
+			"no se pudo preparar el snapshot: %v",
+			err,
+		)
+	}
+
+	snapshot.Customers = append(
+		snapshot.Customers,
+		erpdata.Customer{
+			OriginID:       0,
+			Identification: "9999999999",
+			Name:           "Consumidor final",
+			Email:          "consumidor@example.com",
+			Phone:          "9999999999",
+		},
+	)
+
+	payload, err := json.Marshal(
+		snapshot,
+	)
+
+	if err != nil {
+		t.Fatalf(
+			"no se pudo generar el JSON: %v",
+			err,
+		)
+	}
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/sig/integracion/snapshot",
+		strings.NewReader(
+			string(payload),
+		),
+	)
+
+	request.Header.Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	request.Header.Set(
+		"X-SIG-Key",
+		"test-sync-key",
+	)
+
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf(
+			"se esperaba %d y se obtuvo %d: %s",
+			http.StatusCreated,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	var body struct {
+		Success bool                 `json:"success"`
+		Data    erpdata.ImportResult `json:"data"`
+	}
+
+	if err := json.NewDecoder(
+		response.Body,
+	).Decode(&body); err != nil {
+		t.Fatalf(
+			"no se pudo leer la respuesta: %v",
+			err,
+		)
+	}
+
+	if !body.Success {
+		t.Fatal(
+			"se esperaba success=true",
+		)
+	}
+
+	if body.Data.Counts.Customers != 2 {
+		t.Fatalf(
+			"se esperaban 2 clientes y se obtuvieron %d",
+			body.Data.Counts.Customers,
+		)
+	}
+}
