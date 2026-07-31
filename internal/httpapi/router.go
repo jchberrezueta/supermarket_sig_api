@@ -165,6 +165,12 @@ func newRouter(
 		cfg.IoT.DeviceKey,
 	)
 
+	adminAuth :=
+		NewAdminAuth(
+			cfg.Auth.JWTSecret,
+			cfg.Auth.AllowedRoles,
+		)
+
 	integrationHandler :=
 		handlers.NewIntegrationHandler(
 			erpService,
@@ -349,24 +355,32 @@ func newRouter(
 						iotHandler.IncidentDetail,
 					)
 
-					router.Patch(
-						"/incidentes/{incidentID}/reconocer",
-						iotHandler.RecognizeIncident,
-					)
+					router.Group(
+						func(router chi.Router) {
+							router.Use(
+								adminAuth.Middleware,
+							)
 
-					router.Post(
-						"/incidentes/{incidentID}/acciones",
-						iotHandler.AddCorrectiveAction,
-					)
+							router.Patch(
+								"/incidentes/{incidentID}/reconocer",
+								iotHandler.RecognizeIncident,
+							)
 
-					router.Patch(
-						"/incidentes/{incidentID}/resolver",
-						iotHandler.ResolveIncident,
-					)
+							router.Post(
+								"/incidentes/{incidentID}/acciones",
+								iotHandler.AddCorrectiveAction,
+							)
 
-					router.Patch(
-						"/incidentes/{incidentID}/cerrar",
-						iotHandler.CloseIncident,
+							router.Patch(
+								"/incidentes/{incidentID}/resolver",
+								iotHandler.ResolveIncident,
+							)
+
+							router.Patch(
+								"/incidentes/{incidentID}/cerrar",
+								iotHandler.CloseIncident,
+							)
+						},
 					)
 				},
 			)

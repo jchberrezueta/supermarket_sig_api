@@ -41,6 +41,18 @@ func performWorkflowRequest(
 		)
 	}
 
+	request.Header.Set(
+		"Authorization",
+		"Bearer "+
+			signAdminTestToken(
+				t,
+				"secreto-pruebas-jwt",
+				validAdminTestClaims(
+					"padmin",
+				),
+			),
+	)
+
 	response := httptest.NewRecorder()
 
 	router.ServeHTTP(

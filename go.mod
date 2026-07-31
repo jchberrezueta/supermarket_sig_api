@@ -9,3 +9,5 @@ require (
 )
 
 require github.com/sijms/go-ora/v2 v2.9.0
+
+require github.com/golang-jwt/jwt/v5 v5.3.1

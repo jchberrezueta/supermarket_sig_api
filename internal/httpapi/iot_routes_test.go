@@ -21,6 +21,14 @@ func iotTestConfig() config.Config {
 		TemperatureMax: 8,
 	}
 
+	cfg.Auth = config.AuthConfig{
+		JWTSecret: "secreto-pruebas-jwt",
+		AllowedRoles: []string{
+			"padmin",
+			"pgerente",
+		},
+	}
+
 	return cfg
 }
 
