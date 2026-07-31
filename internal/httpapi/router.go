@@ -22,6 +22,7 @@ type Runtime struct {
 	Handler    http.Handler
 	ERPService *erpdata.Service
 	ERPSource  erpdata.SnapshotSource
+	IoTService *iot.Service
 }
 
 // NewRuntime construye las dependencias compartidas de la API.
@@ -54,16 +55,42 @@ func NewRuntime(
 			cfg.Integration.Timeout,
 		)
 
+	var iotRepository iot.Repository
+
+	if cfg.Database.Enabled &&
+		db != nil {
+		iotRepository =
+			iot.NewOracleRepository(
+				db,
+				cfg.IoT.DeviceCode,
+				cfg.IoT.TemperatureMin,
+				cfg.IoT.TemperatureMax,
+			)
+	} else {
+		iotRepository =
+			iot.NewMemoryRepository()
+	}
+
+	iotService :=
+		iot.NewService(
+			iotRepository,
+			cfg.IoT.DeviceCode,
+			cfg.IoT.TemperatureMin,
+			cfg.IoT.TemperatureMax,
+		)
+
 	return Runtime{
 		Handler: newRouter(
 			cfg,
 			db,
 			erpService,
 			erpSource,
+			iotService,
 		),
 
 		ERPService: erpService,
 		ERPSource:  erpSource,
+		IoTService: iotService,
 	}
 }
 
@@ -84,6 +111,7 @@ func newRouter(
 	db *sql.DB,
 	erpService *erpdata.Service,
 	erpSource erpdata.SnapshotSource,
+	iotService *iot.Service,
 ) http.Handler {
 	router := chi.NewRouter()
 
@@ -130,15 +158,6 @@ func newRouter(
 
 	router.MethodNotAllowed(
 		handlers.MethodNotAllowed,
-	)
-
-	iotRepository := iot.NewMemoryRepository()
-
-	iotService := iot.NewService(
-		iotRepository,
-		cfg.IoT.DeviceCode,
-		cfg.IoT.TemperatureMin,
-		cfg.IoT.TemperatureMax,
 	)
 
 	iotHandler := handlers.NewIoTHandler(

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"supermarket-sig-api/internal/erpdata"
+	"supermarket-sig-api/internal/iot"
 )
 
 func TestRuntimeSharesERPServiceWithRouter(
@@ -112,6 +113,135 @@ func TestRuntimeSharesERPServiceWithRouter(
 		t.Fatalf(
 			"versión inesperada: %q",
 			state.LastImport.ContractVersion,
+		)
+	}
+}
+
+func TestRuntimeSharesIoTServiceWithRouter(
+	t *testing.T,
+) {
+	cfg := iotTestConfig()
+
+	runtime :=
+		NewRuntime(
+			cfg,
+			nil,
+		)
+
+	if runtime.IoTService == nil {
+		t.Fatal(
+			"Runtime no expuso el servicio IoT compartido",
+		)
+	}
+
+	request :=
+		httptest.NewRequest(
+			http.MethodPost,
+			"/api/sig/iot/lecturas",
+			bytes.NewBufferString(
+				`{
+					"codigoDispositivo": "ESP32-BODEGA-01",
+					"temperatura": 4.5,
+					"humedad": 65
+				}`,
+			),
+		)
+
+	request.Header.Set(
+		"Content-Type",
+		"application/json",
+	)
+
+	request.Header.Set(
+		"X-Device-Key",
+		cfg.IoT.DeviceKey,
+	)
+
+	response :=
+		httptest.NewRecorder()
+
+	runtime.Handler.ServeHTTP(
+		response,
+		request,
+	)
+
+	if response.Code !=
+		http.StatusCreated {
+		t.Fatalf(
+			"se esperaba estado %d y se obtuvo %d: %s",
+			http.StatusCreated,
+			response.Code,
+			response.Body.String(),
+		)
+	}
+
+	reading,
+		exists,
+		err := runtime.IoTService.Latest(
+		context.Background(),
+		cfg.IoT.DeviceCode,
+	)
+
+	if err != nil {
+		t.Fatalf(
+			"no se pudo consultar el servicio IoT compartido: %v",
+			err,
+		)
+	}
+
+	if !exists {
+		t.Fatal(
+			"la lectura registrada mediante el router no quedó disponible en IoTService",
+		)
+	}
+
+	if reading.DeviceCode !=
+		cfg.IoT.DeviceCode {
+		t.Fatalf(
+			"código de dispositivo inesperado: %q",
+			reading.DeviceCode,
+		)
+	}
+
+	if reading.Status !=
+		iot.ReadingStatusNormal {
+		t.Fatalf(
+			"estado de lectura inesperado: %q",
+			reading.Status,
+		)
+	}
+
+	if reading.Temperature != 4.5 {
+		t.Fatalf(
+			"temperatura inesperada: %.2f",
+			reading.Temperature,
+		)
+	}
+
+	summary, err :=
+		runtime.IoTService.Summary(
+			context.Background(),
+			cfg.IoT.DeviceCode,
+		)
+
+	if err != nil {
+		t.Fatalf(
+			"no se pudo consultar el resumen IoT compartido: %v",
+			err,
+		)
+	}
+
+	if summary.TotalReadings != 1 {
+		t.Fatalf(
+			"se esperaba 1 lectura y se obtuvieron %d",
+			summary.TotalReadings,
+		)
+	}
+
+	if summary.NormalReadings != 1 {
+		t.Fatalf(
+			"se esperaba 1 lectura normal y se obtuvieron %d",
+			summary.NormalReadings,
 		)
 	}
 }

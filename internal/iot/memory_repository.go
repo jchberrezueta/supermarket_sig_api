@@ -119,6 +119,15 @@ func (repository *MemoryRepository) Save(
 		},
 	)
 
+	if result.Alert != nil &&
+		result.Incident != nil &&
+		repository.hasActiveIncidentForDeviceLocked(
+			result.Reading.DeviceCode,
+		) {
+		result.Alert = nil
+		result.Incident = nil
+	}
+
 	if result.Alert != nil {
 		result.Alert.ID = repository.nextAlertID
 		result.Alert.ReadingID = result.Reading.ID
@@ -185,6 +194,51 @@ func (repository *MemoryRepository) Save(
 	}
 
 	return nil
+}
+
+func (
+	repository *MemoryRepository,
+) hasActiveIncidentForDeviceLocked(
+	deviceCode string,
+) bool {
+	for index :=
+		len(repository.incidentOrder) - 1; index >= 0; index-- {
+		incidentID :=
+			repository.incidentOrder[index]
+
+		incident, exists :=
+			repository.incidents[incidentID]
+
+		if !exists ||
+			incident.Status == "cerrado" {
+			continue
+		}
+
+		alert, exists :=
+			repository.alerts[incident.AlertID]
+
+		if !exists {
+			continue
+		}
+
+		for readingIndex :=
+			len(repository.readings) - 1; readingIndex >= 0; readingIndex-- {
+			reading :=
+				repository.readings[readingIndex]
+
+			if reading.ID != alert.ReadingID {
+				continue
+			}
+
+			if reading.DeviceCode == deviceCode {
+				return true
+			}
+
+			break
+		}
+	}
+
+	return false
 }
 
 // Latest obtiene la última lectura de un dispositivo.
